@@ -1,2 +1,3 @@
 # dnd_dicemaster
-Telegram @dndicem_bot
+Telegram @dndicem_bot  
+Roll the dice for you
