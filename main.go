@@ -149,7 +149,7 @@ func getRandomNumber(max int, count int) ([]int, error) {
 
 	respond := []int{}
 	for range count {
-		respond = append(respond, rng.Intn(max+1)+1)
+		respond = append(respond, min(1, rng.Intn(max+1)))
 	}
 
 	randomInfo.HashUsedCount++
@@ -207,7 +207,18 @@ func main() {
 			&telebot.ArticleResult{
 				Title:       "帮助 & 关于",
 				Description: "使用方法 & 寻找帮助 & 报告错误",
-				Text:        "DnD DM\n限制: 色子数量不能大于1000 & 面数不能大于500\nGithub pedxyuyuko/dnd_dicemaster",
+				Text: "DnD DM\n" +
+					"例子: 1d20 一个20面的色子 (1~20)\n" +
+					"例子: 1d20+5 一个20面的色子+5 (6~25)\n" +
+					"例子: 1d20>15 一个20面的色子(1~20) 大于15检定成功\n" +
+					"例子: A 1d20>15 一个20面的色子(1~20) 带优势(扔2个取大) 大于15检定成功\n" +
+					"例子: D 1d20>15 一个20面的色子(1~20) 带劣势(扔2个取小) 大于15检定成功\n" +
+					"例子: A 1d20+2>15 一个20面的色子+2(2~25) 带优势(扔2个取大) 大于15检定成功\n" +
+					"例子[带名字的检定]: 自定义名字 D 1d20>15 一个20面的色子(1~20) 带劣势(扔2个取小) 大于15检定成功\n" +
+					"例子[建议选仅数字]: 4d8 4个8面的色子 (4~32)\n" +
+					"属性检定：带 大成功(20) 和 大失败(1)\n" +
+					"限制: 色子数量不能大于1000 & 面数不能大于500\n" +
+					"Github pedxyuyuko/dnd_dicemaster",
 			},
 		}
 
@@ -310,7 +321,7 @@ func main() {
 
 		finalValue := max(finalDice+adder, 1)
 
-		respondText := fmt.Sprintf("掷色: %dd%d %v = %d", diceCount, diceFace, diceRolled, finalDice)
+		respondText := fmt.Sprintf("🎲 %dd%d %v = %d", diceCount, diceFace, diceRolled, finalDice)
 		if adderStr != "" {
 			respondText = fmt.Sprintf("%s\n调整值: %s = %d", respondText, adderStr, adder)
 		}
