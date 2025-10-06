@@ -367,6 +367,7 @@ func main() {
 		if c.Query().Text == "" {
 			respondTitleChecking = fmt.Sprintf("[属性检定] 掷🎲 %s", rawDice)
 		}
+		respondTitleChecking = strings.ReplaceAll(respondTitleChecking, "*", "")
 		if diceFace == 20 {
 			if finalDice == 1 {
 				respondTextChecking = fmt.Sprintf("%s *大失败(Crit Miss)*", respondTextChecking)
