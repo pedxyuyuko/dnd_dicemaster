@@ -44,7 +44,10 @@ services:
    go build
    ```
 
-6. Run the artifact
+6. Run the binary:
+   ```bash
+   ./dnd_dicemaster
+   ```
 
 # Features
 
@@ -53,7 +56,7 @@ services:
 - **Modifiers**: Add or subtract values (e.g., 1d20+5-2)
 - **Cryptographically Secure Randomness**: Uses Ethereum block hashes for true randomness
 - **Inline Telegram Queries**: Works directly in Telegram chats
-- **Limits**: Dice count ≤ 1000, faces ≤ 500 (can be remove from source)
+- **Limits**: Dice count ≤ 1000, faces ≤ 1000
 
 # Usage
 
