@@ -129,7 +129,7 @@ func updateEthBlockHash() {
 	}
 }
 
-func getRandomNumber(max int, count int) ([]int, error) {
+func getRandomNumber(diceFace int, count int) ([]int, error) {
 	randomInfo.Lock.Lock()
 	defer randomInfo.Lock.Unlock()
 
@@ -149,7 +149,7 @@ func getRandomNumber(max int, count int) ([]int, error) {
 
 	respond := []int{}
 	for range count {
-		respond = append(respond, min(1, rng.Intn(max+1)))
+		respond = append(respond, max(1, rng.Intn(diceFace+1)))
 	}
 
 	randomInfo.HashUsedCount++
