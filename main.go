@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"math/rand"
 	"net/http"
 	"os"
@@ -129,7 +130,7 @@ func updateEthBlockHash() {
 	}
 }
 
-func getRandomNumber(diceFace int, count int) ([]int, error) {
+func getRandomNumber(diceFace int, count int) ([]int, int64, error) {
 	randomInfo.Lock.Lock()
 	defer randomInfo.Lock.Unlock()
 
@@ -138,13 +139,12 @@ func getRandomNumber(diceFace int, count int) ([]int, error) {
 		updateEthBlockHash()
 	}
 
-	seed, err := strconv.ParseInt(randomInfo.EthBlockHash[51:], 16, 64)
-	if err != nil {
-		return []int{}, err
-	}
-
 	// Set random seed
-	seed = seed + int64(randomInfo.HashUsedCount)
+	hasher := fnv.New64a()
+	hasher.Write([]byte(randomInfo.EthBlockHash))
+	seed := int64(hasher.Sum64())
+	seed = seed + int64(randomInfo.HashUsedCount) + time.Now().UnixMicro()
+
 	rng := rand.New(rand.NewSource(seed))
 
 	respond := []int{}
@@ -154,12 +154,29 @@ func getRandomNumber(diceFace int, count int) ([]int, error) {
 
 	randomInfo.HashUsedCount++
 
+	resultStr := fmt.Sprintf("%v", respond)
+	if len(resultStr) > 64 {
+		resultStr = resultStr[:65] + "..."
+	}
 	logrus.WithFields(logrus.Fields{
 		"seed":   seed,
-		"result": fmt.Sprintf("%v", respond),
+		"result": resultStr,
 	}).Info("Random number generated")
 
-	return respond, nil
+	return respond, seed, nil
+}
+
+func safeMarkdownV2(md string) string {
+	md = strings.ReplaceAll(md, "-", "\\-")
+	md = strings.ReplaceAll(md, "(", "\\(")
+	md = strings.ReplaceAll(md, ")", "\\)")
+	md = strings.ReplaceAll(md, ">", "\\>")
+	md = strings.ReplaceAll(md, "+", "\\+")
+	md = strings.ReplaceAll(md, "[", "\\[")
+	md = strings.ReplaceAll(md, "]", "\\]")
+	md = strings.ReplaceAll(md, ".", "\\.")
+	md = strings.ReplaceAll(md, "~", "\\~")
+	return md
 }
 
 func main() {
@@ -197,30 +214,36 @@ func main() {
 		"DisplayName": bot.Me.FirstName,
 	}).Info("Starting bot")
 
+	helpText := "*DnD DM - The Dice Master*\n" +
+		"`1d20` 一个20面的色子 (1~20)\n" +
+		"`4d8` 4个8面的色子 (4~32) 建议选仅数字 选检定默认>10\n" +
+		"`1d20+5` 一个20面的色子+5 (6~25)\n" +
+		"`1d20>15` 一个20面的色子(1~20) 大于15检定成功\n" +
+		"`A 1d20>15` 一个20面的色子(1~20) 带优势(扔2个取大) 大于15检定成功\n" +
+		"`D 1d20>15` 一个20面的色子(1~20) 带劣势(扔2个取小) 大于15检定成功\n" +
+		"`A 1d20+2>15` 一个20面的色子+2(2~25) 带优势(扔2个取大) 大于15检定成功\n" +
+		"`自定义名字 D 1d20>15` 带名字的检定 一个20面的色子(1~20) 带劣势(扔2个取小) 大于15检定成功\n" +
+		"属性检定：带 *大成功(20)* 和 *大失败(1)*\n" +
+		"限制: 色子数量不能大于1000 & 面数不能大于1000 ||(你是在玩什么超级DnD吗)||"
+	helpText = safeMarkdownV2(helpText)
+	helpText += "\nGithub [pedxyuyuko/dnd\\_dicemaster](https://github\\.com/pedxyuyuko/dnd\\_dicemaster)"
+
+	defaultResponse := []telebot.Result{
+		&telebot.ArticleResult{
+			Title:       "帮助 & 关于",
+			Description: "使用方法 & 报告错误",
+			Text:        helpText,
+			ResultBase: telebot.ResultBase{
+				ParseMode: telebot.ModeMarkdownV2,
+			},
+		},
+	}
+
 	bot.Handle(telebot.OnQuery, func(c telebot.Context) error {
 		logrus.WithFields(logrus.Fields{
 			"ID":       c.Query().Sender.ID,
 			"Username": c.Query().Sender.Username,
 		}).Info("User query")
-
-		defaultResponse := []telebot.Result{
-			&telebot.ArticleResult{
-				Title:       "帮助 & 关于",
-				Description: "使用方法 & 寻找帮助 & 报告错误",
-				Text: "DnD DM\n" +
-					"例子: 1d20 一个20面的色子 (1~20)\n" +
-					"例子: 1d20+5 一个20面的色子+5 (6~25)\n" +
-					"例子: 1d20>15 一个20面的色子(1~20) 大于15检定成功\n" +
-					"例子: A 1d20>15 一个20面的色子(1~20) 带优势(扔2个取大) 大于15检定成功\n" +
-					"例子: D 1d20>15 一个20面的色子(1~20) 带劣势(扔2个取小) 大于15检定成功\n" +
-					"例子: A 1d20+2>15 一个20面的色子+2(2~25) 带优势(扔2个取大) 大于15检定成功\n" +
-					"例子[带名字的检定]: 自定义名字 D 1d20>15 一个20面的色子(1~20) 带劣势(扔2个取小) 大于15检定成功\n" +
-					"例子[建议选仅数字]: 4d8 4个8面的色子 (4~32)\n" +
-					"属性检定：带 大成功(20) 和 大失败(1)\n" +
-					"限制: 色子数量不能大于1000 & 面数不能大于500\n" +
-					"Github pedxyuyuko/dnd_dicemaster",
-			},
-		}
 
 		rawRequest := c.Query().Text
 		if rawRequest == "" {
@@ -256,7 +279,7 @@ func main() {
 		isChecking := len(rawDiceWithCompare) == 2
 		rawDice = rawDiceWithCompare[0]
 
-		compareValue := 0
+		compareValue := 10
 		if isChecking {
 			compareValue, _ = strconv.Atoi(rawDiceWithCompare[1])
 		}
@@ -267,13 +290,13 @@ func main() {
 			diceCount, diceFace, adder, adderStr = 1, 20, 0, ""
 		}
 
-		if diceCount > 1000 || diceFace > 500 {
-			_ = c.Answer(&telebot.QueryResponse{
+		if diceCount > 1000 || diceFace > 1000 {
+			return c.Answer(&telebot.QueryResponse{
 				Results: append([]telebot.Result{
 					&telebot.ArticleResult{
 						Title:       "数量限制",
-						Description: "色子数量不能大于1000 & 面数不能大于500",
-						Text:        fmt.Sprintf("[%s]: %s", rawRequest, err.Error()),
+						Description: "色子数量不能大于1000 & 面数不能大于1000",
+						Text:        "色子数量不能大于1000 & 面数不能大于1000",
 					},
 				}, defaultResponse...),
 				CacheTime: -1,
@@ -289,14 +312,17 @@ func main() {
 			diceCount = 2
 		}
 
-		diceRolled, err := getRandomNumber(diceFace, diceCount)
+		diceRolled, seed, err := getRandomNumber(diceFace, diceCount)
 		if err != nil {
 			_ = c.Answer(&telebot.QueryResponse{
 				Results: append([]telebot.Result{
 					&telebot.ArticleResult{
 						Title:       "在获取随机数的时候发生了点错误",
 						Description: "点击查看错误 (提交Issue pedxyuyuko/dnd_dicemaster)",
-						Text:        fmt.Sprintf("[%s]: %s", rawRequest, err.Error()),
+						Text:        fmt.Sprintf("User input: ``%s``\n```%s```", rawRequest, err.Error()),
+						ResultBase: telebot.ResultBase{
+							ParseMode: telebot.ModeMarkdown,
+						},
 					},
 				}, defaultResponse...),
 				CacheTime: -1,
@@ -321,15 +347,16 @@ func main() {
 
 		finalValue := max(finalDice+adder, 1)
 
-		respondText := fmt.Sprintf("🎲 %dd%d %v = %d", diceCount, diceFace, diceRolled, finalDice)
+		respondText := fmt.Sprintf("🎲 `%dd%d %v = %d`", diceCount, diceFace, diceRolled, finalDice)
 		if adderStr != "" {
-			respondText = fmt.Sprintf("%s\n调整值: %s = %d", respondText, adderStr, adder)
+			respondText = fmt.Sprintf("%s\n调整值: `%s = %d`", respondText, adderStr, adder)
 		}
-		respondText = fmt.Sprintf("%s\n最终结果: %d", respondText, finalValue)
+		respondText = fmt.Sprintf("%s\n最终结果: `%d`", respondText, finalValue)
+		respondText = fmt.Sprintf("%s\nSeed: `%d`", respondText, seed)
 
 		respondTextChecking := ""
 		if attr != "" {
-			respondTextChecking = fmt.Sprintf("(%s)", attrLocal(attr))
+			respondTextChecking = fmt.Sprintf("(*%s*)", attrLocal(attr))
 		}
 		respondTextChecking = fmt.Sprintf("%s属性", respondTextChecking)
 		if checkName != "" {
@@ -342,32 +369,38 @@ func main() {
 		}
 		if diceFace == 20 {
 			if finalDice == 1 {
-				respondTextChecking = fmt.Sprintf("%s大失败(1)", respondTextChecking)
+				respondTextChecking = fmt.Sprintf("%s *大失败(Crit Miss)*", respondTextChecking)
 			} else if finalDice == 20 {
-				respondTextChecking = fmt.Sprintf("%s大成功(20)", respondTextChecking)
+				respondTextChecking = fmt.Sprintf("%s *大成功(Crit Hit)*", respondTextChecking)
 			} else if finalValue >= compareValue {
-				respondTextChecking = fmt.Sprintf("%s成功 %d>=%d", respondTextChecking, finalValue, compareValue)
+				respondTextChecking = fmt.Sprintf("%s *成功* `%d>=%d`", respondTextChecking, finalValue, compareValue)
 			} else {
-				respondTextChecking = fmt.Sprintf("%s失败 %d<%d", respondTextChecking, finalValue, compareValue)
+				respondTextChecking = fmt.Sprintf("%s *失败* `%d<%d`", respondTextChecking, finalValue, compareValue)
 			}
 		} else if finalValue >= compareValue {
-			respondTextChecking = fmt.Sprintf("%s成功 %d>=%d", respondTextChecking, finalValue, compareValue)
+			respondTextChecking = fmt.Sprintf("%s *成功* `%d>=%d`", respondTextChecking, finalValue, compareValue)
 		} else {
-			respondTextChecking = fmt.Sprintf("%s失败 %d<%d", respondTextChecking, finalValue, compareValue)
+			respondTextChecking = fmt.Sprintf("%s *失败* `%d<%d`", respondTextChecking, finalValue, compareValue)
 		}
-		respondTextChecking = fmt.Sprintf("%s\n%s", respondTextChecking, respondText)
+		respondTextChecking = fmt.Sprintf("%s\n----\n%s", respondTextChecking, respondText)
 
 		return c.Answer(&telebot.QueryResponse{
 			Results: append([]telebot.Result{
 				&telebot.ArticleResult{
 					Title:       respondTitleChecking,
 					Description: "举例: [智力 A 1d20+1-2>15] 1个20面色子优势最终结果+1再-2 大于15通过检定",
-					Text:        respondTextChecking,
+					Text:        safeMarkdownV2(respondTextChecking),
+					ResultBase: telebot.ResultBase{
+						ParseMode: telebot.ModeMarkdownV2,
+					},
 				},
 				&telebot.ArticleResult{
 					Title:       fmt.Sprintf("[仅数字] 掷🎲 %s", rawDice),
 					Description: "举例: [A 1d20+1-2] 1个20面色子优势最终结果+1再-2",
-					Text:        respondText,
+					Text:        safeMarkdownV2(respondText),
+					ResultBase: telebot.ResultBase{
+						ParseMode: telebot.ModeMarkdownV2,
+					},
 				},
 			}, defaultResponse...),
 			CacheTime: -1,
